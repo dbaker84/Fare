@@ -38,7 +38,7 @@ INVENTORY_WIDTH = 50
 
 
 
-FOV_ALGO = 0  #default FOV algorithm
+FOV_ALGO = 0  #default FOV algorithm22
 FOV_LIGHT_WALLS = True  #light walls or not
 TORCH_RADIUS = 4
 
@@ -925,7 +925,7 @@ def new_game():
     game_msgs = []
 
     #a warm welcoming message!
-    message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
+    message('Welcome to the world of FARE', libtcod.red)
 
 def initialize_fov():
     global fov_recompute, fov_map
@@ -981,7 +981,7 @@ def main_menu():
 
         #show the game's title, and some credits!
         libtcod.console_set_default_foreground(0, libtcod.light_yellow)
-        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER, 'FARE66')
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER, 'FARE')
 
         #show options and wait for the player's choice
         choice = menu('', ['Play a new game', 'Continue last game', 'Ship Gen Test', 'Quit'], 24)
