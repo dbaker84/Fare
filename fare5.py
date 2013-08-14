@@ -62,6 +62,8 @@ class Tile:
         if block_sight is None: block_sight = blocked
         self.block_sight = block_sight
 
+
+
 class Rect:
     #a rectangle on the map. used to characterize a room.
     def __init__(self, x, y, w, h):
@@ -83,7 +85,7 @@ class Rect:
 class Object:
     #this is a generic object: the player, a monster, an item, the stairs...
     #it's always represented by a character on screen.
-    def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None, item=None, person=None):
+    def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None, item=None, person=None, site=None):
         self.x = x
         self.y = y
         self.char = char
@@ -107,8 +109,13 @@ class Object:
         if self.person:  #let the craft component know who owns it
             self.person.owner = self
 
+        self.site = site
+        if self.site:  #let the site component know who owns it
+            self.site.owner = self
+
     def move(self, dx, dy):
         #move by the given amount, if the destination is not blocked
+
         if not is_blocked(self.x + dx, self.y + dy):
             if self.x + dx > MAP_WIDTH:
                 self.x = 0
@@ -124,6 +131,10 @@ class Object:
             else:
                 self.y += dy
 
+    def dock(self, target, dx, dy):
+        message('You dock into the ' + target.site.stype + ' of ' + target.name)
+        player.x += dx
+        player.y += dy
 
     def move_towards(self, target_x, target_y):
         #vector from this object to the target, and distance
@@ -155,6 +166,7 @@ class Object:
 
     def draw(self):
         #only show if it's visible to the player
+
         if libtcod.map_is_in_fov(fov_map, self.x, self.y):
             (x, y) = to_camera_coordinates(self.x, self.y)
 
@@ -164,6 +176,10 @@ class Object:
                 #libtcod.console_put_char(con, x, y, self.char, libtcod.BKGND_NONE)
                 libtcod.console_put_char_ex(con, x, y, self.char, self.color, get_bcolor(map[self.x][self.y]))
 
+        if not libtcod.map_is_in_fov(fov_map, self.x, self.y) and self.site and explored[self.x][self.y] == 1:
+            (x, y) = to_camera_coordinates(self.x, self.y)
+            libtcod.console_put_char_ex(con, x, y, self.char, self.color * libtcod.dark_grey, get_bcolor(map[self.x][self.y]) * libtcod.dark_grey)
+
     def clear(self):
         #erase the character that represents this object
         (x, y) = to_camera_coordinates(self.x, self.y)
@@ -172,11 +188,15 @@ class Object:
             libtcod.console_put_char_ex(con, x, y, get_char(map[self.x][self.y]), get_fcolor(map[self.x][self.y])*libtcod.dark_grey, get_bcolor(map[self.x][self.y])*libtcod.dark_grey)
 
 class Person:
-    #combat-related properties and methods (monster, player, NPC).
+    #c
     def __init__(self, age, origin):
         self.age = age
         self.origin = origin
 
+class Site:
+    #a tile of the map and its properties
+    def __init__(self,  stype):
+        self.stype = stype
 
 class Fighter:
     #combat-related properties and methods (monster, player, NPC).
@@ -201,6 +221,9 @@ class Fighter:
         else:
             message('You ram into the ' + target.name + ' but see no one on deck.')
 
+        #if target.ai.direction:
+        #    print 'That ship is moving ' + str(target.ai.direction)
+
     def take_damage(self, damage):
         #apply damage if possible
         if damage > 0:
@@ -223,7 +246,7 @@ class BasicMonster:
     def take_turn(self):
         #a basic monster takes its turn. If you can see it, it can see you
         monster = self.owner
-        if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+        if libtcod.map_is_in_fov(fov_map, monster.x, monster.y) and monster.fighter.crew:
 
             #move towards player if far away
             if monster.distance_to(player) >= 2:
@@ -237,6 +260,60 @@ class BasicMonster:
                     message('You see ' + str(monster.fighter.crew[z].person.age) + ' year old ' + monster.fighter.crew[z].name + ' laughing at you.')
                 else:
                     message('You see no one on the ship... spooky...')
+
+class SailingMonster:
+    #AI for a basic monster.
+    def __init__(self, direction, randomness):
+        self.direction = direction
+        self.randomness = randomness
+
+    def take_turn(self):
+        #a basic monster takes its turn. If you can see it, it can see you
+        monster = self.owner
+        dx = 0
+        dy = 0
+        if monster.ai.randomness > random.randint(1,100):
+            monster.ai.direction = random.randint(1,8)
+
+        if monster.ai.direction == 1:
+                dx = -1
+                dy = 1
+        elif monster.ai.direction == 2:
+                dx = 0
+                dy = 1
+        elif monster.ai.direction == 3:
+                dx = 1
+                dy = 1
+        elif monster.ai.direction == 4:
+                dx = -1
+                dy = 0
+        #5 goes in the direction of 9, to not skip a number
+        elif monster.ai.direction == 5:
+                dx = 1
+                dy = -1
+        elif monster.ai.direction == 6:
+                dx = 1
+                dy = 0
+        elif monster.ai.direction == 7:
+                dx = -1
+                dy = -1
+        elif monster.ai.direction == 8:
+                dx = -1
+                dy = 0
+
+        #print monster.x
+        #print dx
+        #print monster.y
+        #print dy
+        if map[monster.x + dx][monster.y + dy] > 0:
+            monster.ai.direction = random.randint(1,8)
+            print monster.name + ' change direction to ' + str(monster.ai.direction)
+
+        if map[monster.x + dx][monster.y + dy] == 0:
+            monster.move(dx, dy)
+            print monster.name + ' moved toward the ' + str(monster.ai.direction)
+
+
 
 class Item:
     #an item that can be picked up and used.
@@ -272,6 +349,11 @@ class Item:
 
 def is_blocked(x, y):
     #first test the map tile
+    if x < 0: x = 0
+    if y < 0: y = 0
+    if x > MAP_WIDTH-1: x = MAP_WIDTH-1
+    if y > MAP_HEIGHT-1: y = MAP_HEIGHT-1
+
     if map[x][y] > 0:
         return True
 
@@ -290,9 +372,9 @@ def is_explored(x, y):
 
 def gen_ships():
     global ships, map, objects
-    numships = 300
+    numships = 10
 
-    ai_component = BasicMonster()
+
 
 
     for i in range(0,numships):
@@ -305,6 +387,12 @@ def gen_ships():
         #x = 40
         #y = 49
 
+        if random.randint(1,100) > 80:
+            ai_component = BasicMonster()
+        else:
+            ai_component = SailingMonster(direction=random.randint(1,8),randomness=1)
+
+        #9ai_component = BasicMonster()
         roster = []
         crewsize = random.randint(0,8)
 
@@ -314,21 +402,19 @@ def gen_ships():
                 crewmate = Object(x, y, 'i', nameLand(), libtcod.darker_magenta, blocks=True, person=person_component)
                 roster.append(crewmate)
 
-
         fighter_component = Fighter(hp=random.randint(4,10), defense=random.randint(4,10), power=random.randint(4,10), speed = random.randint(4,10), inv = [], crew = roster)
-        ai_component = BasicMonster()
 
         ship = Object(x, y, '&', nameBoat(), libtcod.darker_magenta, blocks=True, ai=ai_component, fighter=fighter_component)
+
         print ship.name + ' ' + str(ship.x) + 'x ' + str(ship.y) + 'y'
         print str(ship.fighter.hp) + 'hp ' + str(ship.fighter.defense) + 'def ' + str(ship.fighter.power) + 'power ' + str(ship.fighter.hp) + 'speed'
 
+        #if ship.ai.direction > 0:
+        #7    print 'Direction ' + str(ship.ai.direction)
 
         #if ship.fighter.crew:
         #    for j in range(0,len(ship.fighter.crew)-1):
         #        print ship.fighter.crew[0].name + ' from ' + ship.fighter.crew[0].person.origin + ', age ' + str(ship.fighter.crew[0].person.age)
-
-
-
 
         objects.append(ship)
 
@@ -355,7 +441,7 @@ def place_monsters():
         objects.append(monster)
 
 def make_map():
-    global map, objects, ships
+    global map, objects, ships, player
     global explored
     #the list of objects with just the player
     objects = [player]
@@ -369,6 +455,15 @@ def make_map():
         x = libtcod.random_get_int(0, 1, MAP_WIDTH-1)
         y = libtcod.random_get_int(0, 1, MAP_HEIGHT-1)
         map[x][y] = 1
+
+    #make a border
+    for i in range(MAP_HEIGHT):
+        map[0][i] = 1
+        map[MAP_WIDTH-2][i] = 1
+
+    for i in range(MAP_WIDTH):
+        map[i][0] = 1
+        map[i][MAP_HEIGHT-2] = 1
 
     #fill in "holes"
     for k in range (0,3):
@@ -400,10 +495,38 @@ def make_map():
     #             chance = random.randint(1,4)
     #             if chance > neighbors: map[x][y] = 0
 
+
+
     #change to zero for fog
-    explored = [[ 1
+    explored = [[ 0
         for y in range(MAP_HEIGHT) ]
             for x in range(MAP_WIDTH) ]
+
+def place_sites():
+    global map, objects, ships, player
+    global explored
+    #the list of objects with just the player
+
+
+    num_sites = 200
+
+    for i in range(0,num_sites):
+        place = False
+        while not place:
+            x = libtcod.random_get_int(0, 1, MAP_WIDTH-1)
+            y = libtcod.random_get_int(0, 1, MAP_HEIGHT-1)
+            if map[x][y] > 0: place = True
+
+        if random.randint(0,100) > 50:
+            loc_info = Site(stype='Port')
+        else:
+            loc_info = Site(stype='Town')
+        locale = Object(x, y, '#', nameLand(), color=libtcod.dark_blue, blocks=True, site=loc_info)
+        print 'Site at ' + locale.name + ' ' + str(x) + ' ' + str(y)
+        objects.append(locale)
+        num_sites -= 1
+
+
 
 
 def place_objects(room):
@@ -667,15 +790,21 @@ def player_move_or_attack(dx, dy):
         y = player.y + dy
 
         #try to find an attackable object there
-        target = None
+        fight_tar = None
+        site_tar = None
         for object in objects:
             if object.fighter and object.x == x and object.y == y:
-                target = object
+                fight_tar = object
+                break
+            if object.site and object.x == x and object.y == y:
+                site_tar = object
                 break
 
         #attack if target found, move otherwise
-        if target is not None:
-            player.fighter.attack(target)
+        if fight_tar is not None:
+            player.fighter.attack(fight_tar)
+        elif site_tar is not None:
+            player.dock(site_tar,dx,dy)
         else:
             player.move(dx, dy)
 
@@ -910,12 +1039,13 @@ def new_game():
     #create object representing the player
     fighter_component = Fighter(hp=30, defense=2, power=5, speed = 10, inv=[1,2,3,4], crew=[], death_function=player_death)
 
-    player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component)
+    player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component, blocks=True)
 
 
     #generate map (at this point it's not drawn to the screen)
     make_map()
     gen_ships()
+    place_sites()
     initialize_fov()
 
     game_state = 'playing'
@@ -996,6 +1126,10 @@ def main_menu():
                 continue
             play_game()
         if choice == 2:  #make ship test mode
+            global player
+            fighter_component = Fighter(hp=30, defense=2, power=5, speed = 10, inv=[1,2,3,4], crew=[], death_function=player_death)
+            player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component)
+            make_map()
             gen_ships()
         elif choice == 3:  #quit
             break
