@@ -40,7 +40,7 @@ INVENTORY_WIDTH = 50
 
 FOV_ALGO = 0  #default FOV algorithm22
 FOV_LIGHT_WALLS = True  #light walls or not
-TORCH_RADIUS = 4
+TORCH_RADIUS = 20
 
 LIMIT_FPS = 20  #20 frames-per-second maximum
 
@@ -93,6 +93,7 @@ class Object:
         self.color = color
         self.blocks = blocks
 
+
         self.fighter = fighter
         if self.fighter:  #let the fighter component know who owns it
             self.fighter.owner = self
@@ -130,6 +131,8 @@ class Object:
                 self.y = MAP_HEIGHT - 1
             else:
                 self.y += dy
+
+            self.fighter.wait = self.fighter.speed
 
     def dock(self, target, dx, dy):
         message('You dock into the ' + target.site.stype + ' of ' + target.name)
@@ -185,7 +188,10 @@ class Object:
         (x, y) = to_camera_coordinates(self.x, self.y)
         if x is not None:
             #libtcod.console_put_char(con, x, y, ' ', libtcod.BKGND_NONE)
-            libtcod.console_put_char_ex(con, x, y, get_char(map[self.x][self.y]), get_fcolor(map[self.x][self.y])*libtcod.dark_grey, get_bcolor(map[self.x][self.y])*libtcod.dark_grey)
+            if not libtcod.map_is_in_fov(fov_map, self.x, self.y):
+                libtcod.console_put_char_ex(con, x, y, get_char(map[self.x][self.y]), get_fcolor(map[self.x][self.y])*libtcod.dark_grey, get_bcolor(map[self.x][self.y])*libtcod.dark_grey)
+            else:
+                libtcod.console_put_char_ex(con, x, y, get_char(map[self.x][self.y]), get_fcolor(map[self.x][self.y]), get_bcolor(map[self.x][self.y]))
 
 class Person:
     #c
@@ -209,6 +215,7 @@ class Fighter:
         self.inv = inv
         self.crew = crew
         self.death_function = death_function
+        self.wait = 0
 
     def attack(self, target):
         #a simple formula for attack damage
@@ -313,6 +320,47 @@ class SailingMonster:
             monster.move(dx, dy)
             #print monster.name + ' moved toward the ' + str(monster.ai.direction)
 
+class RacingMonster:
+    #AI for a basic monster.
+    def __init__(self, direction):
+        self.direction = direction
+
+    def take_turn(self):
+        #a basic monster takes its turn. If you can see it, it can see you
+        monster = self.owner
+        dx = 0
+        dy = 0
+
+        if monster.ai.direction == 1:
+                dx = -1
+                dy = 1
+        elif monster.ai.direction == 2:
+                dx = 0
+                dy = 1
+        elif monster.ai.direction == 3:
+                dx = 1
+                dy = 1
+        elif monster.ai.direction == 4:
+                dx = -1
+                dy = 0
+        #5 goes in the direction of 9, to not skip a number
+        elif monster.ai.direction == 5:
+                dx = 1
+                dy = -1
+        elif monster.ai.direction == 6:
+                dx = 1
+                dy = 0
+        elif monster.ai.direction == 7:
+                dx = -1
+                dy = -1
+        elif monster.ai.direction == 8:
+                dx = -1
+                dy = 0
+
+
+        if map[monster.x + dx][monster.y + dy] == 0:
+            monster.move(dx, dy)
+            #print monster.name + ' moved toward the ' + str(monster.ai.direction)
 
 
 class Item:
@@ -370,11 +418,8 @@ def is_explored(x, y):
 
     return False
 
-def gen_ships():
+def gen_ships(numships):
     global ships, map, objects
-    numships = 100
-
-
 
 
     for i in range(0,numships):
@@ -502,6 +547,58 @@ def make_map():
         for y in range(MAP_HEIGHT) ]
             for x in range(MAP_WIDTH) ]
 
+def racetrack_setup():
+    global map, objects, ships, player
+    global explored
+    #the list of objects with just the player
+    objects = [player]
+
+    #fill map with "ocean" tiles
+    map = [[ 0
+        for y in range(MAP_HEIGHT) ]
+            for x in range(MAP_WIDTH) ]
+
+    #make a border
+    for i in range(MAP_HEIGHT):
+        map[0][i] = 1
+        map[MAP_WIDTH-2][i] = 1
+
+    for i in range(MAP_WIDTH):
+        map[i][0] = 1
+        map[i][MAP_HEIGHT-2] = 1
+
+
+
+
+    #change to zero for fog
+    explored = [[ 1
+        for y in range(MAP_HEIGHT) ]
+            for x in range(MAP_WIDTH) ]
+
+def gen_racers(numships):
+    global ships, map, objects
+
+
+    for i in range(0,numships):
+        #choose random spot for this monster
+        x = 3
+        y = i+3
+
+
+
+        ai_component = RacingMonster(6)
+
+
+        #9ai_component = BasicMonster()
+        roster = []
+
+        fighter_component = Fighter(hp=random.randint(4,10), defense=random.randint(4,10), power=random.randint(4,10), speed = random.randint(1,20), inv = [], crew = roster)
+
+        ship = Object(x, y, 22, nameBoat(), libtcod.red, blocks=False, ai=ai_component, fighter=fighter_component)
+        ship.fighter.wait = 0
+        objects.append(ship)
+
+
 def place_sites():
     global map, objects, ships, player
     global explored
@@ -522,7 +619,7 @@ def place_sites():
         else:
             loc_info = Site(stype='Town')
         locale = Object(x, y, '#', nameLand(), color=libtcod.dark_blue, blocks=True, site=loc_info)
-        print 'Site at ' + locale.name + ' ' + str(x) + ' ' + str(y)
+        #print 'Site at ' + locale.name + ' ' + str(x) + ' ' + str(y)
         objects.append(locale)
         num_sites -= 1
 
@@ -878,7 +975,8 @@ def handle_keys():
     elif key.vk == libtcod.KEY_ESCAPE:
         return 'exit'  #exit game
 
-    if game_state == 'playing':
+
+    if game_state == 'ready':
         #movement keys
         if key.vk == libtcod.KEY_KP8:
             player_move_or_attack(0, -1)
@@ -1037,18 +1135,18 @@ def new_game():
     global player, inventory, game_msgs, game_state
 
     #create object representing the player
-    fighter_component = Fighter(hp=30, defense=2, power=5, speed = 10, inv=[1,2,3,4], crew=[], death_function=player_death)
+    fighter_component = Fighter(hp=30, defense=2, power=5, speed=10, inv=[1,2,3,4], crew=[], death_function=player_death)
 
     player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component, blocks=True)
 
 
     #generate map (at this point it's not drawn to the screen)
     make_map()
-    gen_ships()
+    gen_ships(10)
     place_sites()
     initialize_fov()
 
-    game_state = 'playing'
+    game_state = 'ready'
     inventory = []
 
     #create the list of game messages and their colors, starts empty
@@ -1056,6 +1154,29 @@ def new_game():
 
     #a warm welcoming message!
     message('Welcome to the world of FARE', libtcod.red)
+
+def new_race():
+    global player, inventory, game_msgs, game_state
+
+    #create object representing the player
+    fighter_component = Fighter(hp=30, defense=2, power=5, speed = 7, inv=[1,2,3,4], crew=[], death_function=player_death)
+    player = Object(3, 1, 22, 'player', libtcod.darker_flame, fighter=fighter_component)
+
+    racetrack_setup()
+    print 'Track complete'
+    gen_racers(10)
+    print 'Racers placed'
+    #generate map (at this point it's not drawn to the screen)
+    initialize_fov()
+    print 'FOV'
+    game_state = 'ready'
+    inventory = []
+    print 'Game start?'
+    #create the list of game messages and their colors, starts empty
+    game_msgs = []
+    print 'messages printed'
+    #a warm welcoming message!
+    message('Welcome to the world of FARE - Speed Test', libtcod.red)
 
 def initialize_fov():
     global fov_recompute, fov_map
@@ -1090,17 +1211,30 @@ def play_game():
         #    object.clear()
 
         #handle keys and exit game if needed
-        player_action = handle_keys()
-        if player_action == 'exit':
-            save_game()
-            break
-
-
-        #let monsters take their turn
-        if game_state == 'playing' and player_action != 'didnt-take-turn':
+        if player.fighter.wait > 0:
+            game_state == 'waiting'
+            player.fighter.wait -= 1
+            print 'Waiting for player ' + str(player.fighter.wait)
             for object in objects:
                 if object.ai:
-                    object.ai.take_turn()
+                    if object.fighter.wait > 0:  #don't take a turn yet if still waiting
+                        object.fighter.wait -= 1
+                        #print object.name + ' is now at ' + str(object.fighter.wait)
+                    else:
+                        object.clear()
+                        #print object.name + ' is taking a turn'
+                        object.ai.take_turn()
+                        object.draw()
+        else:
+            game_state == 'ready'
+            key = libtcod.console_wait_for_keypress(True)
+            player_action = handle_keys()
+            print 'Player takes action'
+            if player_action == 'exit':
+                save_game()
+                break
+
+
 
 def main_menu():
     img = libtcod.image_load('menu_background.png')
@@ -1114,7 +1248,7 @@ def main_menu():
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER, 'FARE')
 
         #show options and wait for the player's choice
-        choice = menu('', ['Play a new game', 'Continue last game', 'Ship Gen Test', 'Quit'], 24)
+        choice = menu('', ['Play a new game', 'Continue last game', 'Ship Speed Test', 'Quit'], 24)
         if choice == 0:  #new game
             new_game()
             play_game()
@@ -1125,12 +1259,9 @@ def main_menu():
                 msgbox('\n No saved game to load.\n', 24)
                 continue
             play_game()
-        if choice == 2:  #make ship test mode
-            global player
-            fighter_component = Fighter(hp=30, defense=2, power=5, speed = 10, inv=[1,2,3,4], crew=[], death_function=player_death)
-            player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component)
-            make_map()
-            gen_ships()
+        if choice == 2:  #make ship speed mode
+            new_race()
+            play_game()
         elif choice == 3:  #quit
             break
 
