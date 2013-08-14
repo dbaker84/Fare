@@ -6,7 +6,7 @@
     </list>
     <ignored path="Fare.iws" />
     <ignored path=".idea/workspace.xml" />
-    <file path="/Dummy.txt" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376509623881" ignored="false" />
+    <file path="/Dummy.txt" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376509629057" ignored="false" />
     <file path="/fare5.py" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376459307273" ignored="false" />
     <file path="/fare6.py" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376509186438" ignored="false" />
     <file path="/fare.py" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376509538610" ignored="false" />
@@ -222,7 +222,11 @@
       <created>1376509626315</created>
       <updated>1376509626315</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="v140814">
+      <created>1376509629583</created>
+      <updated>1376509629583</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TodoView" selected-index="0">
