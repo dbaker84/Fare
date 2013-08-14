@@ -40,10 +40,9 @@ INVENTORY_WIDTH = 50
 
 FOV_ALGO = 0  #default FOV algorithm22
 FOV_LIGHT_WALLS = True  #light walls or not
-TORCH_RADIUS = 20
+TORCH_RADIUS = 80
 
 LIMIT_FPS = 20  #20 frames-per-second maximum
-
 
 
 
@@ -1161,6 +1160,8 @@ def new_race():
     #create object representing the player
     fighter_component = Fighter(hp=30, defense=2, power=5, speed = 7, inv=[1,2,3,4], crew=[], death_function=player_death)
     player = Object(3, 1, 22, 'player', libtcod.darker_flame, fighter=fighter_component)
+
+
 
     racetrack_setup()
     print 'Track complete'
