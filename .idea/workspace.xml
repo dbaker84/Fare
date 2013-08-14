@@ -2,13 +2,11 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="22e7abc6-c65e-4a81-ad19-5b9830fb173b" name="Default" comment="">
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/savegame" afterPath="$PROJECT_DIR$/savegame" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/fare.py" afterPath="$PROJECT_DIR$/fare.py" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="Fare.iws" />
     <ignored path=".idea/workspace.xml" />
-    <file path="/Dummy.txt" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376509435204" ignored="false" />
+    <file path="/Dummy.txt" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376509623881" ignored="false" />
     <file path="/fare5.py" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376459307273" ignored="false" />
     <file path="/fare6.py" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376509186438" ignored="false" />
     <file path="/fare.py" changelist="22e7abc6-c65e-4a81-ad19-5b9830fb173b" time="1376509538610" ignored="false" />
@@ -220,7 +218,11 @@
       <created>1376509440774</created>
       <updated>1376509440774</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="v140814">
+      <created>1376509626315</created>
+      <updated>1376509626315</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TodoView" selected-index="0">
