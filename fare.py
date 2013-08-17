@@ -40,10 +40,11 @@ INVENTORY_WIDTH = 50
 
 FOV_ALGO = 0  #default FOV algorithm22
 FOV_LIGHT_WALLS = True  #light walls or not
-TORCH_RADIUS = 80
+TORCH_RADIUS = 7
 
-LIMIT_FPS = 20  #20 frames-per-second maximum
+LIMIT_FPS = 30  #20 frames-per-second maximum
 
+STOCK_NAME = ['Beans','Booze']
 
 
 class Tile:
@@ -84,7 +85,7 @@ class Rect:
 class Object:
     #this is a generic object: the player, a monster, an item, the stairs...
     #it's always represented by a character on screen.
-    def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None, item=None, person=None, site=None):
+    def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None, item=None, person=None, site=None, inventory=None):
         self.x = x
         self.y = y
         self.char = char
@@ -113,6 +114,10 @@ class Object:
         if self.site:  #let the site component know who owns it
             self.site.owner = self
 
+        self.inventory = inventory
+        if self.inventory:  #let the inventory component know who owns it
+            self.inventory.owner = self
+
     def move(self, dx, dy):
         #move by the given amount, if the destination is not blocked
 
@@ -130,11 +135,13 @@ class Object:
                 self.y = MAP_HEIGHT - 1
             else:
                 self.y += dy
-
             self.fighter.wait = self.fighter.speed
+        else:
+            self.fighter.wait = self.fighter.speed / 2 # half delay if no move
 
     def dock(self, target, dx, dy):
         message('You dock into the ' + target.site.stype + ' of ' + target.name)
+        message(STOCK_NAME[0] + ' cost ' + str(target.inventory.price[0]) + ' and there are ' + str(target.inventory.stock[0]) + ' for sale.',libtcod.green)
         player.x += dx
         player.y += dy
 
@@ -188,7 +195,8 @@ class Object:
         if x is not None:
             #libtcod.console_put_char(con, x, y, ' ', libtcod.BKGND_NONE)
             if not libtcod.map_is_in_fov(fov_map, self.x, self.y):
-                libtcod.console_put_char_ex(con, x, y, get_char(map[self.x][self.y]), get_fcolor(map[self.x][self.y])*libtcod.dark_grey, get_bcolor(map[self.x][self.y])*libtcod.dark_grey)
+                if explored[x][y] == 1:
+                    libtcod.console_put_char_ex(con, x, y, get_char(map[self.x][self.y]), get_fcolor(map[self.x][self.y])*libtcod.dark_grey, get_bcolor(map[self.x][self.y])*libtcod.dark_grey)
             else:
                 libtcod.console_put_char_ex(con, x, y, get_char(map[self.x][self.y]), get_fcolor(map[self.x][self.y]), get_bcolor(map[self.x][self.y]))
 
@@ -203,15 +211,23 @@ class Site:
     def __init__(self,  stype):
         self.stype = stype
 
+
+class Inventory:
+    #a tile of the map and its properties
+    def __init__(self, stock, price, items):
+        self.stock = stock
+        self.price = price
+        self.items = items
+
 class Fighter:
     #combat-related properties and methods (monster, player, NPC).
-    def __init__(self, hp, defense, power, speed, inv, crew, death_function=None):
+    def __init__(self, hp, defense, power, speed, crew, death_function=None):
         self.max_hp = hp
         self.hp = hp
         self.defense = defense
         self.power = power
         self.speed = speed
-        self.inv = inv
+
         self.crew = crew
         self.death_function = death_function
         self.wait = 0
@@ -315,7 +331,7 @@ class SailingMonster:
             monster.ai.direction = random.randint(1,8)
             #print monster.name + ' change direction to ' + str(monster.ai.direction)
 
-        if map[monster.x + dx][monster.y + dy] == 0:
+        if map[monster.x + dx][monster.y + dy] < 1:
             monster.move(dx, dy)
             #print monster.name + ' moved toward the ' + str(monster.ai.direction)
 
@@ -357,7 +373,7 @@ class RacingMonster:
                 dy = 0
 
 
-        if map[monster.x + dx][monster.y + dy] == 0:
+        if map[monster.x + dx][monster.y + dy] < 1:
             monster.move(dx, dy)
             #print monster.name + ' moved toward the ' + str(monster.ai.direction)
 
@@ -427,16 +443,18 @@ def gen_ships(numships):
         while placable == False:
             x = random.randint(10, MAP_WIDTH-10)
             y = random.randint(10, MAP_HEIGHT-10)
-            if map[x][y] == 0: placable = True
-        #x = 40
-        #y = 49
+            if map[x][y] < 1:
+                placable = True
+                print 'can place ' + str(i)
+            else:
+                print 'cannot place'
 
         if random.randint(1,100) > 50:
             ai_component = BasicMonster()
         else:
             ai_component = SailingMonster(direction=random.randint(1,8),randomness=1)
 
-        #9ai_component = BasicMonster()
+        #ai_component = BasicMonster()
         roster = []
         crewsize = random.randint(0,8)
 
@@ -446,9 +464,10 @@ def gen_ships(numships):
                 crewmate = Object(x, y, 'i', nameLand(), libtcod.lighter_red, blocks=True, person=person_component)
                 roster.append(crewmate)
 
-        fighter_component = Fighter(hp=random.randint(4,10), defense=random.randint(4,10), power=random.randint(4,10), speed = random.randint(4,10), inv = [], crew = roster)
+        inventory_component = Inventory(stock=[], price=[], items = [])
+        fighter_component = Fighter(hp=random.randint(4,10), defense=random.randint(4,10), power=random.randint(4,10), speed = random.randint(4,10), crew = roster)
 
-        ship = Object(x, y, 22, nameBoat(), libtcod.red, blocks=True, ai=ai_component, fighter=fighter_component)
+        ship = Object(x, y, 22, nameBoat(), libtcod.red, blocks=True, ai=ai_component, fighter=fighter_component,inventory=inventory_component)
 
         #print ship.name + ' ' + str(ship.x) + 'x ' + str(ship.y) + 'y'
         #print str(ship.fighter.hp) + 'hp ' + str(ship.fighter.defense) + 'def ' + str(ship.fighter.power) + 'power ' + str(ship.fighter.hp) + 'speed'
@@ -474,7 +493,7 @@ def place_monsters():
         while placable == False:
             x = random.randint(0, MAP_WIDTH-1)
             y = random.randint(0, MAP_HEIGHT-1)
-            if map[x][y] == 0: placable = True
+            if map[x][y] <  1: placable = True
 
 
         fighter_component = Fighter(hp=16, defense=1, power=4, speed=4, inv = [])
@@ -488,7 +507,7 @@ def make_map():
     global map, objects, ships, player
     global explored
     #the list of objects with just the player
-    objects = [player]
+    objects = []
 
     #fill map with "ocean" tiles
     map = [[ 0
@@ -500,23 +519,16 @@ def make_map():
         y = libtcod.random_get_int(0, 1, MAP_HEIGHT-1)
         map[x][y] = 1
 
-    #make a border
-    for i in range(MAP_HEIGHT):
-        map[0][i] = 1
-        map[MAP_WIDTH-2][i] = 1
 
-    for i in range(MAP_WIDTH):
-        map[i][0] = 1
-        map[i][MAP_HEIGHT-2] = 1
 
     #fill in "holes"
-    for k in range (0,3):
+    for k in range (0,1):
         for x in range(0,MAP_WIDTH-1):
             for y in range(0,MAP_HEIGHT-1):
                 if map[x][y] == 0:
                     neighbors = 0
-                    for r in range(-1,1):
-                        for s in range(-1,1):
+                    for r in range(-1,2):
+                        for s in range(-1,2):
                             if map[x+r][y+s] == 1:
                                 #if r == -1 and s == -1:
                                 #    neighbors += 0
@@ -527,24 +539,54 @@ def make_map():
 
                     chance = random.randint(0,6)
                     if chance < neighbors: map[x][y] = 3
-    #
-    # #sink lonely islands
-    # for x in range(0,MAP_WIDTH-1):
-    #     for y in range(0,MAP_HEIGHT-1):
-    #         if map[x][y] > 0:
-    #             neighbors = 0
-    #             for r in range(-1,1):
-    #                 for s in range(-1,1):
-    #                     if map[x+r][y+s] == 1: neighbors += 1
-    #             chance = random.randint(1,4)
-    #             if chance > neighbors: map[x][y] = 0
 
+    #sink lonely islands
+    for x in range(0,MAP_WIDTH-1):
+        for y in range(0,MAP_HEIGHT-1):
+            if map[x][y] > 0:
+                neighbors = 0
+                for r in range(-1,2):
+                    for s in range(-1,2):
+                        if map[x+r][y+s] < 1: neighbors += 1
+                chance = random.randint(1,8)
+                if neighbors >= chance: map[x][y] = 0
+
+
+    # for x in range(0,MAP_WIDTH-1):
+    #         for y in range(0,MAP_HEIGHT-1):
+    #             if map[x][y] > 0:
+    #                 for r in range(-1,2):
+    #                     for s in range(-1,2):
+    #                         if map[x+r][y+s] < 1:
+    #                             map[x][y] = 0
+
+    #make shallows
+    for x in range(0,MAP_WIDTH-1):
+            for y in range(0,MAP_HEIGHT-1):
+                if map[x][y] == 0:
+                    for r in range(-1,2):
+                        for s in range(-1,2):
+                            if map[x+r][y+s] > 0:
+                                map[x][y] = -1
 
 
     #change to zero for fog
     explored = [[ 0
         for y in range(MAP_HEIGHT) ]
             for x in range(MAP_WIDTH) ]
+
+        #make a border
+    for i in range(MAP_HEIGHT):
+        map[0][i] = 1
+        map[1][i] = 1
+        map[MAP_WIDTH-2][i] = 1
+        map[MAP_WIDTH-1][i] = 1
+
+    for i in range(MAP_WIDTH):
+        map[i][0] = 1
+        map[i][1] = 1
+        map[i][MAP_HEIGHT-2] = 1
+        map[i][MAP_HEIGHT-1] = 1
 
 def racetrack_setup():
     global map, objects, ships, player
@@ -591,34 +633,48 @@ def gen_racers(numships):
         #9ai_component = BasicMonster()
         roster = []
 
-        fighter_component = Fighter(hp=random.randint(4,10), defense=random.randint(4,10), power=random.randint(4,10), speed = random.randint(1,20), inv = [], crew = roster)
+        fighter_component = Fighter(hp=random.randint(4,10), defense=random.randint(4,10), power=random.randint(4,10), speed = random.randint(1,20), stock = [], inv = [], crew = roster)
 
         ship = Object(x, y, 22, nameBoat(), libtcod.red, blocks=False, ai=ai_component, fighter=fighter_component)
         ship.fighter.wait = 0
         objects.append(ship)
 
 
-def place_sites():
+def place_sites(num_sites):
     global map, objects, ships, player
     global explored
     #the list of objects with just the player
 
-
-    num_sites = 200
 
     for i in range(0,num_sites):
         place = False
         while not place:
             x = libtcod.random_get_int(0, 1, MAP_WIDTH-1)
             y = libtcod.random_get_int(0, 1, MAP_HEIGHT-1)
-            if map[x][y] > 0: place = True
+            if map[x][y] > 0:
+                for test in objects:
+                    if math.sqrt((x - test.x) ** 2 + (y - test.y) ** 2) > 3:
+                        place = True
+
+        s_stock = [random.randint(0, 100)]
+        s_price = [random.randint(0, 100)]
+
+
+        loc_inv = Inventory(stock = s_stock, price = s_price, items = [])
+
+
 
         if random.randint(0,100) > 50:
             loc_info = Site(stype='Port')
         else:
             loc_info = Site(stype='Town')
-        locale = Object(x, y, '#', nameLand(), color=libtcod.dark_blue, blocks=True, site=loc_info)
-        #print 'Site at ' + locale.name + ' ' + str(x) + ' ' + str(y)
+
+
+
+
+        locale = Object(x, y, '#', nameLand(), color=libtcod.dark_blue, blocks=True, site=loc_info, inventory=loc_inv)
+        print 'Site at ' + locale.name + ' ' + str(x) + ' ' + str(y)
+        print STOCK_NAME[0] + ' Inventory ' + str(locale.inventory.stock[0]) + ' Price ' + str(locale.inventory.price[0])
         objects.append(locale)
         num_sites -= 1
 
@@ -764,7 +820,7 @@ def to_camera_coordinates(x, y):
 
 def get_char(x):
     string = 'Z'
-    if x == 0:
+    if x == 0 or x == -1:
         z = random.randint(0,100)
         if z <= 90:
             string = ' '
@@ -777,14 +833,16 @@ def get_char(x):
 
 def get_fcolor(x):
     color = libtcod.red
-    if x == 0: color = libtcod.white
+    if x == -1: color = libtcod.white
+    elif x == 0: color = libtcod.white
     elif x == 1: color = libtcod.green
     elif x == 3: color = libtcod.dark_green
     return color
 
 def get_bcolor(x):
     color = libtcod.yellow
-    if x == 0: color = libtcod.sky
+    if x == -1: color = libtcod.light_sky
+    elif x == 0: color = libtcod.sky
     elif x == 1: color = libtcod.sepia
     elif x == 3: color = libtcod.sepia
     return color
@@ -878,8 +936,6 @@ def message(new_msg, color = libtcod.white):
 
 def player_move_or_attack(dx, dy):
     global fov_recompute
-
-
     if not (dx == 0 and dy == 0):
         #the coordinates the player is moving to/attacking
         x = player.x + dx
@@ -903,6 +959,8 @@ def player_move_or_attack(dx, dy):
             player.dock(site_tar,dx,dy)
         else:
             player.move(dx, dy)
+    else:
+        player.move(dx, dy)
 
     fov_recompute = True
 
@@ -1134,18 +1192,23 @@ def new_game():
     global player, inventory, game_msgs, game_state
 
     #create object representing the player
-    fighter_component = Fighter(hp=30, defense=2, power=5, speed=10, inv=[1,2,3,4], crew=[], death_function=player_death)
-
-    player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component, blocks=True)
-
-
     #generate map (at this point it's not drawn to the screen)
     make_map()
-    gen_ships(10)
-    place_sites()
+
     initialize_fov()
 
+    gen_ships(100)
+
+    place_sites(100)
+
+
+
     game_state = 'ready'
+
+    inventory_component = Inventory(stock=[], price=[], items = [])
+    fighter_component = Fighter(hp=30, defense=2, power=5, speed=5, crew=[], death_function=player_death)
+    player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component, inventory=inventory_component,blocks=True)
+    objects.append(player)
     inventory = []
 
     #create the list of game messages and their colors, starts empty
@@ -1154,30 +1217,30 @@ def new_game():
     #a warm welcoming message!
     message('Welcome to the world of FARE', libtcod.red)
 
-def new_race():
-    global player, inventory, game_msgs, game_state
-
-    #create object representing the player
-    fighter_component = Fighter(hp=30, defense=2, power=5, speed = 7, inv=[1,2,3,4], crew=[], death_function=player_death)
-    player = Object(3, 1, 22, 'player', libtcod.darker_flame, fighter=fighter_component)
-
-
-
-    racetrack_setup()
-    print 'Track complete'
-    gen_racers(10)
-    print 'Racers placed'
-    #generate map (at this point it's not drawn to the screen)
-    initialize_fov()
-    print 'FOV'
-    game_state = 'ready'
-    inventory = []
-    print 'Game start?'
-    #create the list of game messages and their colors, starts empty
-    game_msgs = []
-    print 'messages printed'
-    #a warm welcoming message!
-    message('Welcome to the world of FARE - Speed Test', libtcod.red)
+# def new_race():
+#     global player, inventory, game_msgs, game_state
+#
+#     #create object representing the player
+#     fighter_component = Fighter(hp=30, defense=2, power=5, speed = 7, crew=[], death_function=player_death)
+#     player = Object(3, 1, 22, 'player', libtcod.darker_flame, fighter=fighter_component, blocks=True)
+#
+#
+#
+#     racetrack_setup()
+#     print 'Track complete'
+#     gen_racers(10)
+#     print 'Racers placed'
+#     #generate map (at this point it's not drawn to the screen)
+#     initialize_fov()
+#     print 'FOV'
+#     game_state = 'ready'
+#     inventory = []
+#     print 'Game start?'
+#     #create the list of game messages and their colors, starts empty
+#     game_msgs = []
+#     print 'messages printed'
+#     #a warm welcoming message!
+#     message('Welcome to the world of FARE - Speed Test', libtcod.red)
 
 def initialize_fov():
     global fov_recompute, fov_map
@@ -1249,7 +1312,7 @@ def main_menu():
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER, 'FARE')
 
         #show options and wait for the player's choice
-        choice = menu('', ['Play a new game', 'Continue last game', 'Ship Speed Test', 'Quit'], 24)
+        choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 24)
         if choice == 0:  #new game
             new_game()
             play_game()
@@ -1260,14 +1323,11 @@ def main_menu():
                 msgbox('\n No saved game to load.\n', 24)
                 continue
             play_game()
-        if choice == 2:  #make ship speed mode
-            new_race()
-            play_game()
-        elif choice == 3:  #quit
+        elif choice == 2:  #quit
             break
 
 libtcod.console_set_custom_font('terminal16x16_gs_ro.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW)
-libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
+libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'FARE', False)
 libtcod.sys_set_fps(LIMIT_FPS)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
