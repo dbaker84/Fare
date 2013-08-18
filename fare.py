@@ -588,6 +588,56 @@ def make_map():
         map[i][MAP_HEIGHT-2] = 1
         map[i][MAP_HEIGHT-1] = 1
 
+def make_newmap():
+    global map, objects, ships, player
+    global explored
+    #the list of objects with just the player
+    objects = []
+
+    #fill map with "ocean" tiles
+    map = [[ 0
+        for y in range(MAP_HEIGHT) ]
+            for x in range(MAP_WIDTH) ]
+
+    for i in range(MAP_HEIGHT):
+        map[0][i] = 1
+        map[MAP_WIDTH-1][i] = 1
+
+    for i in range(MAP_WIDTH):
+        map[i][0] = 1
+        map[i][MAP_HEIGHT-1] = 1
+
+    noise_zoom=20 #lower number = bigger islands
+    noise_octaves=20 #lower number = smoother islands
+
+    hm = libtcod.heightmap_new(MAP_WIDTH, MAP_HEIGHT)
+    hm1 = libtcod.heightmap_new(MAP_WIDTH, MAP_HEIGHT)
+    hm2 = libtcod.heightmap_new(MAP_WIDTH, MAP_HEIGHT)
+
+    noise = libtcod.noise_new(2)
+    libtcod.heightmap_add_fbm(hm1, noise, noise_zoom, noise_zoom, 0.0, 0.0, noise_octaves, 0.0, 1.0)
+
+    libtcod.heightmap_multiply_hm(hm1, hm1, hm)
+    libtcod.heightmap_normalize(hm, mi=0.0, ma=1)
+
+    # generate world grid
+    for x in range(0,MAP_WIDTH-1):
+            for y in range(0,MAP_HEIGHT-1):
+                hmv = libtcod.heightmap_get_value(hm, x, y)
+                if .25 > hmv >= 0: hmv = 0
+                elif .50 > hmv >= .25: hmv = -1
+                elif .75 > hmv >= .50: hmv = 3
+                elif 1 > hmv >= .25: hmv = 1
+                map[x][y] = hmv
+
+    libtcod.heightmap_delete(hm)
+    libtcod.heightmap_delete(hm1)
+    libtcod.heightmap_delete(hm2)
+
+    explored = [[ 1
+        for y in range(MAP_HEIGHT) ]
+            for x in range(MAP_WIDTH) ]
+
 def racetrack_setup():
     global map, objects, ships, player
     global explored
@@ -1193,7 +1243,7 @@ def new_game():
 
     #create object representing the player
     #generate map (at this point it's not drawn to the screen)
-    make_map()
+    make_newmap()
 
     initialize_fov()
 
@@ -1216,6 +1266,31 @@ def new_game():
 
     #a warm welcoming message!
     message('Welcome to the world of FARE', libtcod.red)
+
+
+def new_maptest():
+    global player, inventory, game_msgs, game_state
+
+    #create object representing the player
+    #generate map (at this point it's not drawn to the screen)
+    make_newmap()
+
+    initialize_fov()
+
+
+    game_state = 'ready'
+
+    inventory_component = Inventory(stock=[], price=[], items = [])
+    fighter_component = Fighter(hp=30, defense=2, power=5, speed=1, crew=[], death_function=player_death)
+    player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component, inventory=inventory_component,blocks=True)
+    objects.append(player)
+    inventory = []
+
+    #create the list of game messages and their colors, starts empty
+    game_msgs = []
+
+    #a warm welcoming message!
+    message('Welcome to the world of FARE - new map gen test', libtcod.red)
 
 # def new_race():
 #     global player, inventory, game_msgs, game_state
@@ -1312,18 +1387,21 @@ def main_menu():
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER, 'FARE')
 
         #show options and wait for the player's choice
-        choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 24)
+        choice = menu('', ['Play a new game', 'Continue last game', 'New Map Test', 'Quit'], 24)
         if choice == 0:  #new game
             new_game()
             play_game()
-        if choice == 1:  #load last game
+        elif choice == 1:  #load last game
             try:
                 load_game()
             except:
                 msgbox('\n No saved game to load.\n', 24)
                 continue
             play_game()
-        elif choice == 2:  #quit
+        elif choice == 2:
+            new_maptest()
+            play_game()
+        elif choice == 3:  #quit
             break
 
 libtcod.console_set_custom_font('terminal16x16_gs_ro.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW)
