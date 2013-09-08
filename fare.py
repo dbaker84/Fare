@@ -1199,8 +1199,7 @@ def handle_keys():
             #         player.x = wx
             #         player.y = wy
 
-            key_char = ''
-            key = ''
+
 
             return 'didnt-take-turn'
 
@@ -1231,7 +1230,7 @@ def engage_combat(target):
     print "TARGET HP " + str(target.fighter.hp)
 
 def target_tile(max_range=None):
-    #return the position of a tile left-clicked in player's FOV (optionally in a range), or (None,None) if right-clicked.
+    #return the position of a tile left-click3ed in player's FOV (optionally in a range), or (None,None) if right-clicked.
     global key, mouse
     while True:
         #render the screen. this erases the inventory and shows the names of objects under the mouse.
