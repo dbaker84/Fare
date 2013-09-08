@@ -31,7 +31,7 @@ MAP_HEIGHT = 200
 BAR_WIDTH = 20
 PANEL_HEIGHT = 7
 PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
-MSG_X= BAR_WIDTH + 2
+MSG_X= BAR_WIDTH + 10
 MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH - 2
 MSG_HEIGHT = PANEL_HEIGHT - 1
 INVENTORY_WIDTH = 50
@@ -51,13 +51,13 @@ FOV_ALGO = 0  #default FOV algorithm22
 FOV_LIGHT_WALLS = True  #light walls or not
 TORCH_RADIUS = 7
 
-LIMIT_FPS = 30  #20 frames-per-second maximum
+LIMIT_FPS = 20  #20 frames-per-second maximum
 
 STOCK_NAME = ['Food','Water','Alcohol',
                 'Lumber','Iron','Cloth',
                 'Tar','Fuel','Javelins']
 
-# libtcod.console_disable_keyboard_repeat()
+libtcod.console_set_keyboard_repeat(100, 100)
 
 class Tile:
     #a tile of the map and its properties
@@ -139,7 +139,7 @@ class Object:
 
             self.fighter.wait = self.fighter.speed
         else:
-            self.fighter.wait = self.fighter.speed / 2 # half delay if no move
+            self.fighter.wait = self.fighter.speed # delay if no move
 
     def dock(self, target, dx, dy):
         message('You dock into the ' + target.site.stype + ' of ' + target.name + ', population ' + str(target.site.popul))
@@ -304,13 +304,8 @@ class Inventory:
         #present the root console to the player and wait for a key-press
         libtcod.console_flush()
         time.sleep(1)
-        key = libtcod.console_wait_for_keypress(True)
-        if key.vk == libtcod.KEY_ENTER and key.lalt:  #(special case) Alt+Enter: toggle fullscreen
-            libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
+        key2 = libtcod.console_wait_for_keypress(True)
 
-        #convert the ASCII code to an index; if it corresponds to an option, return it
-        index = key.c - ord('a')
-        if index >= 0 and index < len(options): return index
         return None
 
 
@@ -363,8 +358,9 @@ class Fighter:
 
 class TraderMonster:
     #AI for a basic monster.
-    def __init__(self, movin=False):
+    def __init__(self, movin=False, path=None):
         self.movin = movin
+        self.path = libtcod.path_new_using_map(fov_map)
 
     def take_turn(self):
         monster = self.owner
@@ -373,41 +369,37 @@ class TraderMonster:
 
 
         if not monster.ai.movin: # if no destination set, this will set a target and create a path
-            path = libtcod.path_new_using_map(fov_map)
-            for othersite in objects: # pick nearest port
-                if othersite.site:
-                    dx = othersite.x - monster.x
-                    dy = othersite.y - monster.y
-                    cdist = math.sqrt(dx ** 2 + dy ** 2)
-                    if cdist < distance: # see if this site is closer
-                        tarx = othersite.x
-                        tary = othersite.y
-                        distance = cdist
-                        print monster.x, monster.y,tarx,tary
-                        libtcod.path_compute(path,monster.x,monster.y,tarx,tary)
-                        print "path size",libtcod.path_size(path)
-                        # print 'found a better target for ' + monster.name
+            monster.ai.path = libtcod.path_new_using_map(fov_map)
+            z = False
+            while not z:
+                tt = objects[random.randint(0,len(objects)-1)]
+
+                if tt.site:
+                    ex = tt.x
+                    ey = tt.y
+                    z = True
 
 
-            # make a path to the target port
 
+            ox = monster.x
+            oy = monster.y
 
-            for i in range (libtcod.path_size(path)) :
-                x,y=libtcod.path_get(path,i)
-                print 'Astar coord : '+ monster.name + " " + str(monster.x) + " " + str(monster.y)
+            libtcod.path_compute(monster.ai.path,ox, oy, ex, ey)
+
+            # for i in range (libtcod.path_size(monster.ai.path)) :
+            #     x,y=libtcod.path_get(monster.ai.path,i)
+            #     print 'Astar coord : '+ monster.name + " " + str(x) + " " + str(y)
+
             monster.ai.movin = True
 
 
         if monster.ai.movin:
-            x,y=libtcod.path_walk(path,True)
-            print x,y
+            x,y=libtcod.path_walk(monster.ai.path,True)
             if x is None :
-                print monster.name + " is stuck"
                 monster.ai.movin = False
             else :
-                print monster.name + " is moving!"
-                monster.x = x
-                monster.y = y
+                monster.move(x - monster.x,y - monster.y)
+
 
 
 class BasicMonster:
@@ -525,13 +517,17 @@ def is_blocked(x, y):
     if x > MAP_WIDTH-1: x = MAP_WIDTH-1
     if y > MAP_HEIGHT-1: y = MAP_HEIGHT-1
 
-    if map[x][y] > 0:
-        return True
-
     #now check for any blocking objects
     for object in objects:
         if object.blocks and object.x == x and object.y == y:
-            return True
+            if object.site:
+                return False
+            else:
+                return True
+
+    if map[x][y] > 0:
+        return True
+
 
     return False
 
@@ -553,9 +549,6 @@ def gen_ships(numships):
             y = random.randint(10, MAP_HEIGHT-10)
             if map[x][y] < 1:
                 placable = True
-                print 'can place ' + str(i)
-            else:
-                print 'cannot place'
 
         # if random.randint(1,100) > 50:
         #     ai_component = BasicMonster()
@@ -564,28 +557,19 @@ def gen_ships(numships):
 
         ai_component = TraderMonster()
         roster = []
-        crewsize = random.randint(0,8)
+        crewsize = random.randint(1,8)
 
         if crewsize > 0:
             for i in range(1,crewsize):
                 person_component = Person(age = random.randint(16,80), origin = nameLand())
-                crewmate = Object(x, y, 'i', nameLand(), libtcod.lighter_red, blocks=True, person=person_component)
+                crewmate = Object(x, y, 'i', nameLand(), libtcod.lighter_red, blocks=False, person=person_component)
                 roster.append(crewmate)
 
         inventory_component = Inventory(stock=[], price=[], items = [])
         fighter_component = Fighter(hp=random.randint(4,10), defense=random.randint(4,10), power=random.randint(4,10), speed = random.randint(4,10),money = 0, crew = roster)
 
-        ship = Object(x, y, 22, nameBoat(), libtcod.red, blocks=True, ai=ai_component, fighter=fighter_component,inventory=inventory_component)
+        ship = Object(x, y, 22, nameBoat(), libtcod.red, blocks=False, ai=ai_component, fighter=fighter_component,inventory=inventory_component)
 
-        #print ship.name + ' ' + str(ship.x) + 'x ' + str(ship.y) + 'y'
-        #print str(ship.fighter.hp) + 'hp ' + str(ship.fighter.defense) + 'def ' + str(ship.fighter.power) + 'power ' + str(ship.fighter.hp) + 'speed'
-
-        #if ship.ai.direction > 0:
-        #7    print 'Direction ' + str(ship.ai.direction)
-
-        #if ship.fighter.crew:
-        #    for j in range(0,len(ship.fighter.crew)-1):
-        #        print ship.fighter.crew[0].name + ' from ' + ship.fighter.crew[0].person.origin + ', age ' + str(ship.fighter.crew[0].person.age)
 
         objects.append(ship)
 
@@ -722,9 +706,10 @@ def place_sites(num_sites):
         loc_info = Site(stype=rtype, popul = people)
 
 
-        locale = Object(x, y, '#', nameLand(), color=libtcod.dark_blue, blocks=True, site=loc_info, inventory=loc_inv)
+        locale = Object(x, y, '#', nameLand(), color=libtcod.dark_blue, blocks=False, site=loc_info, inventory=loc_inv)
 
         objects.append(locale)
+        map[x][y] = -9
         num_sites -= 1
 
 
@@ -869,11 +854,19 @@ def to_camera_coordinates(x, y):
 
     return (x, y)
 
+def check_here(x,y):
+    global objects_here
+    objects_here = []
+    for o in objects:
+        if o.fighter:
+            if o.x == x and o.y == y and o.name != 'player':
+                objects_here.append(o.name)
+
 def get_char(x):
     string = 'Z'
     if x < 1:
         z = random.randint(0,100)
-        if z <= 90:
+        if z <= 95:
             string = ' '
         else:
             string = '~'
@@ -890,6 +883,7 @@ def get_fcolor(x):
     color = libtcod.red
     if x == -1 or x == -3: color = libtcod.white
     elif x == 0 or x == -2: color = libtcod.white
+    elif x == -9: color = libtcod.gray
     elif x == 1: color = libtcod.sepia
     elif x == 2: color = libtcod.light_gray
     elif x == 3: color = libtcod.gray
@@ -903,6 +897,7 @@ def get_bcolor(x):
     color = libtcod.yellow
     if x == -1 or x == -3: color = libtcod.sky
     elif x == 0 or x == -2: color = libtcod.light_sky
+    elif x == -9: color = libtcod.gray
     elif x == 1: color = libtcod.light_sepia
     elif x == 2: color = libtcod.sepia
     elif x == 3: color = libtcod.dark_sepia
@@ -933,6 +928,7 @@ def render_all():
 
                 wall = is_blocked(map_x,map_y)
 
+                visible = True #see entire map
                 if not visible:
                     #if it's not visible right now, the player can only see it if it's explored
                     if explored[map_x][map_y] == 1:
@@ -975,8 +971,17 @@ def render_all():
         y += 1
 
     #show the player's stats
-    #render_bar(1, 1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
-    #    libtcod.light_red, libtcod.darker_red)
+    # dungeon_level = 1
+    # render_bar(1, 1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
+    #             libtcod.light_red, libtcod.darker_red)
+    # libtcod.console_print_ex(panel, 1, 3, libtcod.BKGND_NONE, libtcod.LEFT, 'Dungeon level ' + str(dungeon_level))
+
+    check_here(player.x,player.y)
+    y = 1
+    for (name) in objects_here:
+        libtcod.console_set_default_foreground(panel, libtcod.red)
+        libtcod.console_print_ex(panel, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, name)
+        y += 1
 
     #display names of objects under the mouse
     libtcod.console_set_default_foreground(panel, libtcod.light_gray)
@@ -1088,6 +1093,7 @@ def msgbox(text, width=50):
 def handle_keys():
     global key
 
+
     if key.vk == libtcod.KEY_ENTER and key.lalt:
         #Alt+Enter: toggle fullscreen
         libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
@@ -1136,6 +1142,27 @@ def handle_keys():
                         object.item.pick_up()
                         break
 
+            if key_char == 'e':
+                engaging = False
+                for object in objects:
+                    if object.x == player.x and object.y == player.y and object.fighter and object.name != 'player':
+                        target = object
+                        engage_combat(target)
+                        engaging = True
+                if not engaging:
+                    print "No one to fight!"
+                time.sleep(1)
+
+            if key_char == 'k':
+                engaging = False
+                for object in objects:
+                    if object.x == player.x and object.y == player.y and object.fighter and object.name != 'player':
+                        target = object
+                        engage_combat(target)
+                        engaging = True
+                if not engaging:
+                    print "No one to fight!"
+
             if key_char == 'i':
                 #show the inventory; if an item is selected, use it
                 chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
@@ -1147,6 +1174,33 @@ def handle_keys():
                 chosen_item = inventory_menu('Press the key next to an item to drop it, or any other to cancel.\n')
                 if chosen_item is not None:
                     chosen_item.drop()
+
+            # if key_char == 'w':
+            #     #show the inventory; if an item is selected, drop it
+            #
+            #     time.sleep(1)
+            #     print "Warp to what X?"
+            #     wx = libtcod.console_wait_for_keypress(True)
+            #     wx = chr(key.c)
+            #     wx = int(wx)
+            #     print wx
+            #
+            #     time.sleep(1)
+            #     print "Warp to what Y?"
+            #     wy = libtcod.console_wait_for_keypress(True)
+            #     wy = chr(key.c)
+            #     wy = int(wy)
+            #     print wy
+            #
+            #     if not isinstance( wx, int ) or not isinstance( wy, int ):
+            #         message('Wrong coords',libtcod.red)
+            #     else:
+            #         message('Warping to ' + str(wx) + " " + str(wy), libtcod.light_magenta)
+            #         player.x = wx
+            #         player.y = wy
+
+            key_char = ''
+            key = ''
 
             return 'didnt-take-turn'
 
@@ -1171,6 +1225,10 @@ def monster_death(monster):
     monster.ai = None
     monster.name = 'remains of ' + monster.name
     monster.send_to_back()
+
+def engage_combat(target):
+    print "ENGAGE COMBAT WITH " + target.name
+    print "TARGET HP " + str(target.fighter.hp)
 
 def target_tile(max_range=None):
     #return the position of a tile left-clicked in player's FOV (optionally in a range), or (None,None) if right-clicked.
@@ -1263,20 +1321,22 @@ def new_game():
 
     make_map()
     print 'mapped'
-    initialize_fov()
-    print 'fovved'
+
     place_sites(100) # do this before ships - it checks all objects for placement; shorter list
     print 'sites placed'
-    gen_ships(1)
-    print 'ships genned'
 
+    initialize_fov()
+    print 'fovved'
+
+    gen_ships(100)
+    print 'ships genned'
 
 
     game_state = 'ready'
 
     inventory_component = Inventory(stock=[], price=[], items = [])
     fighter_component = Fighter(hp=30, defense=2, power=5, speed=5, money=0, crew=[], death_function=player_death)
-    player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component, inventory=inventory_component,blocks=True)
+    player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component, inventory=inventory_component,blocks=False)
     objects.append(player)
     inventory = []
 
@@ -1326,9 +1386,6 @@ def play_game():
 
         libtcod.console_flush()
 
-        #erase all objects at their old locations, before they move
-        #for object in objects:
-        #    object.clear()
 
         #handle keys and exit game if needed
         if player.fighter.wait > 0:
