@@ -51,13 +51,13 @@ FOV_ALGO = 0  #default FOV algorithm22
 FOV_LIGHT_WALLS = True  #light walls or not
 TORCH_RADIUS = 7
 
-LIMIT_FPS = 20  #20 frames-per-second maximum
+LIMIT_FPS = 200  #20 frames-per-second maximum
 
 STOCK_NAME = ['Food','Water','Alcohol',
                 'Lumber','Iron','Cloth',
                 'Tar','Fuel','Javelins']
 
-libtcod.console_set_keyboard_repeat(100, 100)
+libtcod.console_set_keyboard_repeat(0,0)
 
 class Tile:
     #a tile of the map and its properties
@@ -97,7 +97,7 @@ class Rect:
 class Object:
     #this is a generic object: the player, a monster, an item, the stairs...
     #it's always represented by a character on screen.
-    def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None, item=None, person=None, site=None, inventory=None):
+    def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None, item=None, person=None, site=None, inventory=None, weapon=None):
         self.x = x
         self.y = y
         self.char = char
@@ -129,6 +129,10 @@ class Object:
         self.inventory = inventory
         if self.inventory:  #let the inventory component know who owns it
             self.inventory.owner = self
+
+        self.weapon = weapon
+        if self.weapon:  #let the inventory component know who owns it
+            self.weapon.owner = self
 
     def move(self, dx, dy):
         #move by the given amount, if the destination is not blocked
@@ -508,6 +512,15 @@ class Item:
             if self.use_function() != 'cancelled':
                 inventory.remove(self.owner)  #destroy after use, unless it was cancelled for some reason
 
+class Weapon:
+    #an item that can be picked up and used.
+    def __init__(self, range, damage, accuracy):
+        self.range = range
+        self.damage = damage
+        self.accuracy = accuracy
+
+
+
 
 
 def is_blocked(x, y):
@@ -565,7 +578,21 @@ def gen_ships(numships):
                 crewmate = Object(x, y, 'i', nameLand(), libtcod.lighter_red, blocks=False, person=person_component)
                 roster.append(crewmate)
 
-        inventory_component = Inventory(stock=[], price=[], items = [])
+        zitems = []
+        z = random.randint(0,100)
+        if z <= 33:
+            weapon_design = Weapon(range=70,damage=3,accuracy=60)
+            equipment = Object(x,y,'x',"Rifled Cannon",libtcod.light_grey,weapon=weapon_design)
+        if 33 < z <= 66:
+            weapon_design = Weapon(range=50,damage=5,accuracy=60)
+            equipment = Object(x,y,'x',"Smooth-bore Cannon",libtcod.light_grey,weapon=weapon_design)
+        else:
+            weapon_design = Weapon(range=30,damage=7,accuracy=60)
+            equipment = Object(x,y,'x',"Exploding Javelin",libtcod.light_grey,weapon=weapon_design)
+
+        zitems.append(equipment)
+
+        inventory_component = Inventory(stock=[], price=[], items = zitems)
         fighter_component = Fighter(hp=random.randint(4,10), defense=random.randint(4,10), power=random.randint(4,10), speed = random.randint(4,10),money = 0, crew = roster)
 
         ship = Object(x, y, 22, nameBoat(), libtcod.red, blocks=False, ai=ai_component, fighter=fighter_component,inventory=inventory_component)
@@ -859,7 +886,7 @@ def check_here(x,y):
     objects_here = []
     for o in objects:
         if o.fighter:
-            if o.x == x and o.y == y and o.name != 'player':
+            if o.x == x and o.y == y and o.name != player.name:
                 objects_here.append(o.name)
 
 def get_char(x):
@@ -1011,24 +1038,24 @@ def player_move_or_attack(dx, dy):
         x = player.x + dx
         y = player.y + dy
 
-        #try to find an attackable object there
-        fight_tar = None
-        site_tar = None
-        for object in objects:
-            if object.fighter and object.x == x and object.y == y:
-                fight_tar = object
-                break
-            if object.site and object.x == x and object.y == y:
-                site_tar = object
-                break
-
-        #attack if target found, move otherwise
-        if fight_tar is not None:
-            player.fighter.attack(fight_tar)
-        elif site_tar is not None:
-            player.dock(site_tar,dx,dy)
-        else:
-            player.move(dx, dy)
+        # #try to find an attackable object there
+        # fight_tar = None
+        # site_tar = None
+        # for object in objects:
+        #     if object.fighter and object.x == x and object.y == y:
+        #         fight_tar = object
+        #         break
+        #     if object.site and object.x == x and object.y == y:
+        #         site_tar = object
+        #         break
+        #
+        # #attack if target found, move otherwise
+        # if fight_tar is not None:
+        #     player.fighter.attack(fight_tar)
+        # elif site_tar is not None:
+        #     player.dock(site_tar,dx,dy)
+        # else:
+        player.move(dx, dy)
     else:
         player.move(dx, dy)
 
@@ -1093,6 +1120,8 @@ def msgbox(text, width=50):
 def handle_keys():
     global key
 
+    if key.vk == libtcod.KEY_NONE:
+        return 'noturn'
 
     if key.vk == libtcod.KEY_ENTER and key.lalt:
         #Alt+Enter: toggle fullscreen
@@ -1102,106 +1131,107 @@ def handle_keys():
         return 'exit'  #exit game
 
 
-    if game_state == 'ready':
-        #movement keys
-        if key.vk == libtcod.KEY_KP8:
-            player_move_or_attack(0, -1)
-
-        elif key.vk == libtcod.KEY_KP2:
-            player_move_or_attack(0, 1)
-
-        elif key.vk == libtcod.KEY_KP4:
-            player_move_or_attack(-1, 0)
-
-        elif key.vk == libtcod.KEY_KP6:
-            player_move_or_attack(1, 0)
-
-        elif key.vk == libtcod.KEY_KP3:
-            player_move_or_attack(1, 1)
-
-        elif key.vk == libtcod.KEY_KP7:
-            player_move_or_attack(-1, -1)
-
-        elif key.vk == libtcod.KEY_KP1:
-            player_move_or_attack(-1, 1)
-
-        elif key.vk == libtcod.KEY_KP9:
-            player_move_or_attack(1, -1)
-
-        elif key.vk == libtcod.KEY_KP5:
-            player_move_or_attack(0, 0)
-
-        else:
-            #test for other keys
-            key_char = chr(key.c)
-
-            if key_char == 'g':
-                #pick up an item
-                for object in objects:  #look for an item in the player's tile
-                    if object.x == player.x and object.y == player.y and object.item:
-                        object.item.pick_up()
-                        break
-
-            if key_char == 'e':
-                engaging = False
-                for object in objects:
-                    if object.x == player.x and object.y == player.y and object.fighter and object.name != 'player':
-                        target = object
-                        engage_combat(target)
-                        engaging = True
-                if not engaging:
-                    print "No one to fight!"
-                time.sleep(1)
-
-            if key_char == 'k':
-                engaging = False
-                for object in objects:
-                    if object.x == player.x and object.y == player.y and object.fighter and object.name != 'player':
-                        target = object
-                        engage_combat(target)
-                        engaging = True
-                if not engaging:
-                    print "No one to fight!"
-
-            if key_char == 'i':
-                #show the inventory; if an item is selected, use it
-                chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
-                if chosen_item is not None:
-                    chosen_item.use()
-
-            if key_char == 'd':
-                #show the inventory; if an item is selected, drop it
-                chosen_item = inventory_menu('Press the key next to an item to drop it, or any other to cancel.\n')
-                if chosen_item is not None:
-                    chosen_item.drop()
-
-            # if key_char == 'w':
-            #     #show the inventory; if an item is selected, drop it
-            #
-            #     time.sleep(1)
-            #     print "Warp to what X?"
-            #     wx = libtcod.console_wait_for_keypress(True)
-            #     wx = chr(key.c)
-            #     wx = int(wx)
-            #     print wx
-            #
-            #     time.sleep(1)
-            #     print "Warp to what Y?"
-            #     wy = libtcod.console_wait_for_keypress(True)
-            #     wy = chr(key.c)
-            #     wy = int(wy)
-            #     print wy
-            #
-            #     if not isinstance( wx, int ) or not isinstance( wy, int ):
-            #         message('Wrong coords',libtcod.red)
-            #     else:
-            #         message('Warping to ' + str(wx) + " " + str(wy), libtcod.light_magenta)
-            #         player.x = wx
-            #         player.y = wy
 
 
 
-            return 'didnt-take-turn'
+
+    if key.vk == libtcod.KEY_KP8:
+        player_move_or_attack(0, -1)
+
+    elif key.vk == libtcod.KEY_KP2:
+        player_move_or_attack(0, 1)
+
+    elif key.vk == libtcod.KEY_KP4:
+        player_move_or_attack(-1, 0)
+
+    elif key.vk == libtcod.KEY_KP6:
+        player_move_or_attack(1, 0)
+
+    elif key.vk == libtcod.KEY_KP3:
+        player_move_or_attack(1, 1)
+
+    elif key.vk == libtcod.KEY_KP7:
+        player_move_or_attack(-1, -1)
+
+    elif key.vk == libtcod.KEY_KP1:
+        player_move_or_attack(-1, 1)
+
+    elif key.vk == libtcod.KEY_KP9:
+        player_move_or_attack(1, -1)
+
+    elif key.vk == libtcod.KEY_KP5:
+        player_move_or_attack(0, 0)
+
+    else:
+        #test for other keys
+        key_char = chr(key.c)
+
+        if key_char == 'g':
+            #pick up an item
+            for object in objects:  #look for an item in the player's tile
+                if object.x == player.x and object.y == player.y and object.item:
+                    object.item.pick_up()
+                    break
+
+        if key_char == 'e':
+            engaging = False
+            for object in objects:
+                if object.x == player.x and object.y == player.y and object.fighter and object.name != player.name:
+                    target = object
+                    engage_combat(target)
+                    engaging = True
+            if not engaging:
+                print "No one to fight!"
+            time.sleep(1)
+
+        if key_char == 'k':
+            engaging = False
+            for object in objects:
+                if object.x == player.x and object.y == player.y and object.fighter and object.name != player.name:
+                    target = object
+                    engage_combat(target)
+                    engaging = True
+            if not engaging:
+                print "No one to fight!"
+
+        if key_char == 'i':
+            #show the inventory; if an item is selected, use it
+            chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
+            if chosen_item is not None:
+                chosen_item.use()
+
+        if key_char == 'd':
+            #show the inventory; if an item is selected, drop it
+            chosen_item = inventory_menu('Press the key next to an item to drop it, or any other to cancel.\n')
+            if chosen_item is not None:
+                chosen_item.drop()
+
+        # if key_char == 'w':
+        #     #show the inventory; if an item is selected, drop it
+        #
+        #     time.sleep(1)
+        #     print "Warp to what X?"
+        #     wx = libtcod.console_wait_for_keypress(True)
+        #     wx = chr(key.c)
+        #     wx = int(wx)
+        #     print wx
+        #
+        #     time.sleep(1)
+        #     print "Warp to what Y?"
+        #     wy = libtcod.console_wait_for_keypress(True)
+        #     wy = chr(key.c)
+        #     wy = int(wy)
+        #     print wy
+        #
+        #     if not isinstance( wx, int ) or not isinstance( wy, int ):
+        #         message('Wrong coords',libtcod.red)
+        #     else:
+        #         message('Warping to ' + str(wx) + " " + str(wy), libtcod.light_magenta)
+        #         player.x = wx
+        #         player.y = wy
+    return 'tookturn'
+
+
 
 def player_death(player):
     #the game ended!
@@ -1226,8 +1256,106 @@ def monster_death(monster):
     monster.send_to_back()
 
 def engage_combat(target):
-    print "ENGAGE COMBAT WITH " + target.name
-    print "TARGET HP " + str(target.fighter.hp)
+
+    engaged = True
+
+    distance = random.randint(30,100)
+
+    eweapon = None
+    pweapon = None
+    if target.inventory.items:
+        for eq in target.inventory.items:
+            if eq.weapon:
+                eweapon=eq
+                print "Opponent is using " + eq.name
+    if player.inventory.items:
+        for eq in player.inventory.items:
+            if eq.weapon:
+                pweapon=eq
+                print "Player is using " + eq.name
+
+    while engaged:
+
+        patt = ''
+
+        if eweapon:
+            if distance > eweapon.weapon.range:
+                distance -= (10-target.fighter.speed)
+                eatt = "attempted to get closer"
+            else:
+                if random.randint(0,100) < eweapon.weapon.accuracy:
+                    eatt  = "attacked with the " + eweapon.name + " and did " + str(eweapon.weapon.damage) + " damage"
+                else:
+                    eatt = "attacked with the " + eweapon.name + " but missed"
+
+
+        pressed = libtcod.console_wait_for_keypress(True)
+
+        pchar = chr(pressed.c)
+
+
+        if pchar == 'a' or pchar == 'A':
+            if eweapon:
+                if distance > pweapon.weapon.range:
+                    patt = "attacked with the " + pweapon.name + " but the shot fell short"
+                else:
+                    if random.randint(0,100) < pweapon.weapon.accuracy:
+                        patt = "attacked with the " + pweapon.name + " and did " + str(pweapon.weapon.damage) + " damage"
+                    else:
+                        patt = "attacked with the " + pweapon.name + " but missed"
+
+        elif pchar == 'f' or pchar == 'F':
+            patt = 'flee'
+            engaged = False
+        elif pchar == 'c' or pchar == 'C':
+            patt = 'attempted to get closer'
+            distance -= (10 - player.fighter.speed)
+        elif pchar == 'i' or pchar == 'I':
+            patt = 'attempted to get move further away'
+            distance += (10 - player.fighter.speed)
+        elif pchar == 'w' or pchar == 'W':
+            patt = 'waited'
+        else:
+            patt = ''
+
+
+
+        libtcod.console_set_default_background(battlepan, libtcod.sky)
+        libtcod.console_clear(battlepan)
+
+        libtcod.console_set_default_foreground(battlepan,libtcod.darker_green)
+        libtcod.console_print_ex(battlepan, 2, 2, libtcod.BKGND_NONE, libtcod.LEFT, player.name)
+        libtcod.console_print_ex(battlepan, 2, 3, libtcod.BKGND_NONE, libtcod.LEFT, "HP: " + str(player.fighter.hp) + " / " + str(player.fighter.max_hp))
+        if pweapon:
+            libtcod.console_print_ex(battlepan, 2, 4, libtcod.BKGND_NONE, libtcod.LEFT, "Weapon: " + pweapon.name)
+        else:
+            libtcod.console_print_ex(battlepan, 2, 4, libtcod.BKGND_NONE, libtcod.LEFT, "Weapon: Unarmed")
+
+
+
+        libtcod.console_set_default_foreground(battlepan,libtcod.black)
+        libtcod.console_print_ex(battlepan, SCREEN_WIDTH/2, 3, libtcod.BKGND_NONE, libtcod.CENTER, 'vs.')
+
+        libtcod.console_print_ex(battlepan, 2, 12, libtcod.BKGND_NONE, libtcod.LEFT, 'Actions last turn: ' + str(distance))
+        if len(patt) > 0:
+            libtcod.console_print_ex(battlepan, 2, 13, libtcod.BKGND_NONE, libtcod.LEFT, 'You ' + patt + ".")
+        if len(eatt) > 0:
+            libtcod.console_print_ex(battlepan, 2, 14, libtcod.BKGND_NONE, libtcod.LEFT, 'The ' + target.name + " " + eatt + ".")
+        libtcod.console_print_ex(battlepan, 2, 15, libtcod.BKGND_NONE, libtcod.LEFT, 'Range to target: ' + str(distance))
+        libtcod.console_print_ex(battlepan, 2, 17, libtcod.BKGND_NONE, libtcod.LEFT, 'What is your command?')
+        libtcod.console_print_ex(battlepan, 2, 18, libtcod.BKGND_NONE, libtcod.LEFT, '[A]ttack, [C]lose distance, [I]increase distance, [F]lee engagement, [W]ait')
+
+        libtcod.console_set_default_foreground(battlepan,libtcod.red)
+        libtcod.console_print_ex(battlepan, SCREEN_WIDTH-3, 2, libtcod.BKGND_NONE, libtcod.RIGHT, target.name)
+        libtcod.console_print_ex(battlepan, SCREEN_WIDTH-3, 3, libtcod.BKGND_NONE, libtcod.RIGHT, "HP: " + str(target.fighter.hp) + " / " + str(target.fighter.max_hp))
+        if eweapon:
+            libtcod.console_print_ex(battlepan, SCREEN_WIDTH-3, 4, libtcod.BKGND_NONE, libtcod.RIGHT, "Weapon: " + eweapon.name)
+        else:
+            libtcod.console_print_ex(battlepan, SCREEN_WIDTH-3, 4, libtcod.BKGND_NONE, libtcod.RIGHT, "Weapon: Unarmed")
+
+
+        libtcod.console_blit(battlepan, 0, 0, MAP_WIDTH, MAP_HEIGHT, 0, 0, 0)
+        libtcod.console_flush()
 
 def target_tile(max_range=None):
     #return the position of a tile left-click3ed in player's FOV (optionally in a range), or (None,None) if right-clicked.
@@ -1333,9 +1461,23 @@ def new_game():
 
     game_state = 'ready'
 
-    inventory_component = Inventory(stock=[], price=[], items = [])
-    fighter_component = Fighter(hp=30, defense=2, power=5, speed=5, money=0, crew=[], death_function=player_death)
-    player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'player', libtcod.darker_flame, fighter=fighter_component, inventory=inventory_component,blocks=False)
+    zitems = []
+    z = random.randint(0,100)
+    if z <= 33:
+        weapon_design = Weapon(range=70,damage=3,accuracy=60)
+        equipment = Object(0,0,'x',"Rifled Cannon",libtcod.light_grey,weapon=weapon_design)
+    if 33 < z <= 66:
+        weapon_design = Weapon(range=50,damage=5,accuracy=60)
+        equipment = Object(0,0,'x',"Smooth-bore Cannon",libtcod.light_grey,weapon=weapon_design)
+    else:
+        weapon_design = Weapon(range=30,damage=7,accuracy=60)
+        equipment = Object(0,0,'x',"Exploding Javelin",libtcod.light_grey,weapon=weapon_design)
+
+    zitems.append(equipment)
+
+    inventory_component = Inventory(stock=[], price=[], items = zitems)
+    fighter_component = Fighter(hp=30, defense=2, power=5, speed=2, money=0, crew=[], death_function=player_death)
+    player = Object(random.randint(1,MAP_WIDTH-1), random.randint(1,MAP_HEIGHT-1), 22, 'The Pequod', libtcod.darker_flame, fighter=fighter_component, inventory=inventory_component,blocks=False)
     objects.append(player)
     inventory = []
 
@@ -1362,7 +1504,7 @@ def initialize_fov():
     libtcod.console_clear(con)  #unexplored areas start black (which is the default background color)
 
 def play_game():
-    global camera_x, camera_y, key, mouse, tick, objects
+    global camera_x, camera_y, key, mouse, tick, objects, game_state
 
     player_action = None
     mouse = libtcod.Mouse()
@@ -1370,26 +1512,30 @@ def play_game():
 
     (camera_x, camera_y) = (0, 0)
 
+    # print game_state
     while not libtcod.console_is_window_closed():
         #render the screen
+        # print game_state
 
-        tick += 1
+
         if tick >= TICKCLICK:
             tick = 0
             print 'TICK'
             process_world()
 
 
+        game_state = 'noturn'
         libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,key,mouse)
         render_all()
 
         libtcod.console_flush()
 
 
+
         #handle keys and exit game if needed
         if player.fighter.wait > 0:
-            game_state == 'waiting'
             player.fighter.wait -= 1
+            tick += 1
             # print 'Waiting for player ' + str(player.fighter.wait)
             for object in objects:
                 if object.ai:
@@ -1402,11 +1548,11 @@ def play_game():
                         object.ai.take_turn()
                         object.draw()
         else:
-            game_state == 'ready'
-            key = libtcod.console_wait_for_keypress(True)
-            player_action = handle_keys()
+            game_state = handle_keys()
+            if game_state == 'tookturn':
+                tick += 1
             # print 'Player takes action'
-            if player_action == 'exit':
+            if game_state == 'exit':
                 save_game()
                 break
 
@@ -1489,6 +1635,7 @@ libtcod.sys_set_fps(LIMIT_FPS)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 off2 = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
+battlepan = libtcod.console_new(MAP_WIDTH,MAP_HEIGHT)
 coordpan = libtcod.console_new(15, 1)
 
 main_menu()
